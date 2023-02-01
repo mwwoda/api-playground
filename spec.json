@@ -1,0 +1,901 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "Box File Spec",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.box.com/2.0",
+      "description": "Box Platform API server"
+    }
+  ],
+  "paths": {
+    "/files/{file_id}": {
+      "get": {
+        "operationId": "get_files_id",
+        "summary": "Get file information",
+        "tags": ["Files"],
+        "x-box-tag": "files",
+        "x-box-enable-explorer": true,
+        "description": "Retrieves the details about a file.",
+        "parameters": [
+          {
+            "name": "file_id",
+            "description": "The unique identifier that represents a file.\n\nThe ID for any file can be determined\nby visiting a file in the web application\nand copying the ID from the URL. For example,\nfor the URL `https://*.app.box.com/files/123`\nthe `file_id` is `123`.",
+            "example": "12345",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "description": "A comma-separated list of attributes to include in the\nresponse. This can be used to request fields that are\nnot normally returned in a standard response.\n\nBe aware that specifying this parameter will have the\neffect that none of the standard fields are returned in\nthe response unless explicitly specified, instead only\nfields for the mini representation are returned, additional\nto the fields requested.\n\nAdditionally this field can be used to query any metadata\napplied to the file by specifying the `metadata` field as well\nas the scope and key of the template to retrieve, for example\n`?field=metadata.enterprise_12345.contractTemplate`.",
+            "in": "query",
+            "example": ["id", "type", "name"],
+            "required": false,
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "if-none-match",
+            "description": "Ensures an item is only returned if it has changed.\n\nPass in the item's last observed `etag` value\ninto this header and the endpoint will fail\nwith a `304 Not Modified` if the item has not\nchanged since.",
+            "in": "header",
+            "required": false,
+            "example": "1",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "boxapi",
+            "description": "The URL, and optional password, for the shared link of this item.\n\nThis header can be used to access items that have not been\nexplicitly shared with a user.\n\nUse the format `shared_link=[link]` or if a password is required then\nuse `shared_link=[link]&shared_link_password=[password]`.\n\nThis header can be used on the file or folder shared, as well as on any files\nor folders nested within the item.",
+            "example": "shared_link=[link]&shared_link_password=[password]",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-rep-hints",
+            "description": "A header required to request specific `representations`\nof a file. Use this in combination with the `fields` query\nparameter to request a specific file representation.\n\nThe general format for these representations is\n`X-Rep-Hints: [...]` where `[...]` is one or many\nhints in the format `[fileType?query]`.\n\nFor example, to request a `png` representation in `32x32`\nas well as `64x64` pixel dimensions provide the following\nhints.\n\n`x-rep-hints: [jpg?dimensions=32x32][jpg?dimensions=64x64]`\n\nAdditionally, a `text` representation is available for all\ndocument file types in Box using the `[extracted_text]`\nrepresentation.\n\n`x-rep-hints: [extracted_text]`",
+            "example": "[pdf]",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns a file object.\n\nNot all available fields are returned by default. Use the\n[fields](#param-fields) query parameter to explicitly request\nany specific fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/File"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Returns an empty response when the `If-None-Match` header matches\nthe current `etag` value of the folder. This indicates that the folder\nhas not changed since it was last requested."
+          },
+          "401": {
+            "description": "Returned when the access token provided in the `Authorization` header\nis not recognized or not provided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Returned if the file is not found, or the user does not\nhave access to the file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Returned if the `file_id` is not in a recognized format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Returns an error if an action is performed on a file with an\nincorrect media type.\n\n* `unsupported_media_type` when requesting an `expiring_embed_link`\n  for a file that is not supported by Box Embed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected client error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_files_id",
+        "summary": "Restore file",
+        "tags": ["Trashed files"],
+        "x-box-tag": "trashed_files",
+        "description": "Restores a file that has been moved to the trash.\n\nAn optional new parent ID can be provided to restore the file to in case the\noriginal folder has been deleted.",
+        "parameters": [
+          {
+            "name": "file_id",
+            "description": "The unique identifier that represents a file.\n\nThe ID for any file can be determined\nby visiting a file in the web application\nand copying the ID from the URL. For example,\nfor the URL `https://*.app.box.com/files/123`\nthe `file_id` is `123`.",
+            "example": "12345",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "description": "A comma-separated list of attributes to include in the\nresponse. This can be used to request fields that are\nnot normally returned in a standard response.\n\nBe aware that specifying this parameter will have the\neffect that none of the standard fields are returned in\nthe response unless explicitly specified, instead only\nfields for the mini representation are returned, additional\nto the fields requested.",
+            "in": "query",
+            "example": ["id", "type", "name"],
+            "required": false,
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "description": "An optional new name for the file.",
+                    "example": "Restored.docx",
+                    "type": "string"
+                  },
+                  "parent": {
+                    "allOf": [
+                      {
+                        "type": "object",
+                        "description": "The parent for this item",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "The ID of parent item",
+                            "example": "123"
+                          }
+                        }
+                      },
+                      {
+                        "description": "Specifies an optional ID of a folder to restore the file to\nwhen the original folder no longer exists.\n\nPlease be aware that this ID will only be used if the original\nfolder no longer exists. Use this ID to provide a fallback\nlocation to restore the file to if the original location\nhas been deleted."
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Returns a file object when the file has been restored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashFileRestored"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Returns an error if the user does not have access to the folder\nthe file is being restored to, or the user does not have permission\nto restore files from the trash.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Returns an error if the file is not in the trash.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Returns an error if there is an file with the same name\nin the folder the file is being restored to.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An unexpected client error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClientError": {
+        "title": "Client error",
+        "type": "object",
+        "x-box-resource-id": "client_error",
+        "description": "A generic error",
+        "properties": {
+          "type": {
+            "description": "`error`",
+            "example": "error",
+            "type": "string",
+            "enum": ["error"],
+            "nullable": false
+          },
+          "status": {
+            "description": "The HTTP status of the response.",
+            "example": 400,
+            "type": "integer",
+            "format": "int32",
+            "nullable": false
+          },
+          "code": {
+            "description": "A Box-specific error code",
+            "example": "item_name_invalid",
+            "type": "string",
+            "enum": [
+              "created",
+              "accepted",
+              "no_content",
+              "redirect",
+              "not_modified",
+              "bad_request",
+              "unauthorized",
+              "forbidden",
+              "not_found",
+              "method_not_allowed",
+              "conflict",
+              "precondition_failed",
+              "too_many_requests",
+              "internal_server_error",
+              "unavailable",
+              "item_name_invalid",
+              "insufficient_scope"
+            ]
+          },
+          "message": {
+            "description": "A short message describing the error.",
+            "example": "Method Not Allowed",
+            "type": "string",
+            "nullable": false
+          },
+          "context_info": {
+            "description": "A free-form object that contains additional context\nabout the error. The possible fields are defined on\na per-endpoint basis. `message` is only one example.",
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "More details on the error.",
+                "example": "Something went wrong."
+              }
+            }
+          },
+          "help_url": {
+            "description": "A URL that links to more information about why this error occurred.",
+            "example": "http://developers.box.com/docs/#errors",
+            "type": "string",
+            "nullable": false
+          },
+          "request_id": {
+            "description": "A unique identifier for this response, which can be used\nwhen contacting Box support.",
+            "type": "string",
+            "example": "abcdef123456",
+            "nullable": false
+          }
+        }
+      },
+      "File": {
+        "title": "File",
+        "type": "object",
+        "x-box-resource-id": "file",
+        "x-box-variant": "standard",
+        "description": "A standard representation of a file, as returned from any\nfile API endpoints by default",
+        "required": [
+          "description",
+          "size",
+          "path_collection",
+          "created_at",
+          "modified_at",
+          "modified_by",
+          "owned_by",
+          "item_status"
+        ],
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/File--Mini"
+          },
+          {
+            "properties": {
+              "description": {
+                "type": "string",
+                "nullable": false,
+                "description": "The optional description of this file",
+                "maxLength": 256,
+                "example": "Contract for Q1 renewal"
+              },
+              "size": {
+                "type": "integer",
+                "nullable": false,
+                "description": "The file size in bytes. Be careful parsing this integer as it can\nget very large and cause an integer overflow.",
+                "example": 629644
+              },
+              "path_collection": {
+                "allOf": [
+                  {
+                    "title": "Path collection",
+                    "description": "A list of parent folders for an item.",
+                    "type": "object",
+                    "required": ["total_count", "entries"],
+                    "properties": {
+                      "total_count": {
+                        "description": "The number of folders in this list.",
+                        "example": 1,
+                        "type": "integer",
+                        "format": "int64",
+                        "nullable": false
+                      },
+                      "entries": {
+                        "type": "array",
+                        "description": "The parent folders for this item",
+                        "nullable": false,
+                        "items": {
+                          "$ref": "#/components/schemas/Folder--Mini"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "description": "The tree of folders that this file is contained in,\nstarting at the root."
+                  },
+                  {
+                    "nullable": false
+                  }
+                ]
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": false,
+                "description": "The date and time when the file was created on Box.",
+                "example": "2012-12-12T10:53:43-08:00"
+              },
+              "modified_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": false,
+                "description": "The date and time when the file was last updated on Box.",
+                "example": "2012-12-12T10:53:43-08:00"
+              },
+              "trashed_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "The time at which this file was put in the trash.",
+                "example": "2012-12-12T10:53:43-08:00",
+                "nullable": true
+              },
+              "purged_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "The time at which this file is expected to be purged\nfrom the trash.",
+                "example": "2012-12-12T10:53:43-08:00",
+                "nullable": true
+              },
+              "content_created_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "The date and time at which this file was originally\ncreated, which might be before it was uploaded to Box.",
+                "example": "2012-12-12T10:53:43-08:00"
+              },
+              "content_modified_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "The date and time at which this file was last updated,\nwhich might be before it was uploaded to Box.",
+                "example": "2012-12-12T10:53:43-08:00"
+              },
+              "created_by": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User--Mini"
+                  },
+                  {
+                    "description": "The user who created this file"
+                  }
+                ]
+              },
+              "modified_by": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User--Mini"
+                  },
+                  {
+                    "description": "The user who last modified this file"
+                  },
+                  {
+                    "nullable": false
+                  }
+                ]
+              },
+              "owned_by": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/User--Mini"
+                  },
+                  {
+                    "description": "The user who owns this file"
+                  },
+                  {
+                    "nullable": false
+                  }
+                ]
+              },
+              "shared_link": {
+                "allOf": [
+                  {
+                    "title": "Shared link",
+                    "description": "Shared links provide direct, read-only access to files or folder on Box.\n\nShared links with open access level allow anyone with the URL\nto access the item, while shared links with company or collaborators access\nlevels can only be accessed by appropriately authenticated Box users.",
+                    "type": "object",
+                    "required": [
+                      "url",
+                      "accessed",
+                      "effective_access",
+                      "effective_permission",
+                      "is_password_enabled",
+                      "download_count",
+                      "preview_count"
+                    ],
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "format": "url",
+                        "description": "The URL that can be used to access the item on Box.\n\nThis URL will display the item in Box's preview UI where the file\ncan be downloaded if allowed.\n\nThis URL will continue to work even when a custom `vanity_url`\nhas been set for this shared link.",
+                        "example": "https://www.box.com/s/vspke7y05sb214wjokpk",
+                        "nullable": false
+                      },
+                      "download_url": {
+                        "type": "string",
+                        "format": "url",
+                        "x-box-premium-feature": true,
+                        "description": "A URL that can be used to download the file. This URL can be used in\na browser to download the file. This URL includes the file\nextension so that the file will be saved with the right file type.\n\nThis property will be `null` for folders.",
+                        "example": "https://www.box.com/shared/static/rh935iit6ewrmw0unyul.jpeg",
+                        "nullable": true
+                      },
+                      "vanity_url": {
+                        "type": "string",
+                        "format": "url",
+                        "description": "The \"Custom URL\" that can also be used to preview the item on Box.  Custom\nURLs can only be created or modified in the Box Web application.",
+                        "example": "https://acme.app.box.com/v/my_url/",
+                        "nullable": true
+                      },
+                      "vanity_name": {
+                        "type": "string",
+                        "description": "The custom name of a shared link, as used in the `vanity_url` field.",
+                        "example": "my_url",
+                        "nullable": true
+                      },
+                      "access": {
+                        "type": "string",
+                        "description": "The access level for this shared link.\n\n* `open` - provides access to this item to anyone with this link\n* `company` - only provides access to this item to people the same company\n* `collaborators` - only provides access to this item to people who are\n   collaborators on this item\n\nIf this field is omitted when creating the shared link, the access level\nwill be set to the default access level specified by the enterprise admin.",
+                        "enum": ["open", "company", "collaborators"],
+                        "example": "open",
+                        "nullable": false
+                      },
+                      "effective_access": {
+                        "type": "string",
+                        "description": "The effective access level for the shared link. This can be a more\nrestrictive access level than the value in the `access` field when the\nenterprise settings restrict the allowed access levels.",
+                        "enum": ["open", "company", "collaborators"],
+                        "example": "company",
+                        "nullable": false
+                      },
+                      "effective_permission": {
+                        "type": "string",
+                        "description": "The effective permissions for this shared link.\nThese result in the more restrictive combination of\nthe share link permissions and the item permissions set\nby the administrator, the owner, and any ancestor item\nsuch as a folder.",
+                        "enum": [
+                          "can_edit",
+                          "can_download",
+                          "can_preview",
+                          "no_access"
+                        ],
+                        "example": "can_download",
+                        "nullable": false
+                      },
+                      "unshared_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "The date and time when this link will be unshared. This field can only be\nset by users with paid accounts.",
+                        "example": "2018-04-13T13:53:23-07:00",
+                        "nullable": true
+                      },
+                      "is_password_enabled": {
+                        "type": "boolean",
+                        "description": "Defines if the shared link requires a password to access the item.",
+                        "example": true,
+                        "nullable": false
+                      },
+                      "permissions": {
+                        "type": "object",
+                        "description": "Defines if this link allows a user to preview, edit, and download an item.\nThese permissions refer to the shared link only and\ndo not supersede permissions applied to the item itself.",
+                        "required": ["can_download", "can_preview", "can_edit"],
+                        "properties": {
+                          "can_download": {
+                            "type": "boolean",
+                            "example": true,
+                            "nullable": false,
+                            "description": "Defines if the shared link allows for the item to be downloaded. For\nshared links on folders, this also applies to any items in the folder.\n\nThis value can be set to `true` when the effective access level is\nset to `open` or `company`, not `collaborators`."
+                          },
+                          "can_preview": {
+                            "type": "boolean",
+                            "example": true,
+                            "nullable": false,
+                            "description": "Defines if the shared link allows for the item to be previewed.\n\nThis value is always `true`. For shared links on folders this also\napplies to any items in the folder."
+                          },
+                          "can_edit": {
+                            "type": "boolean",
+                            "example": false,
+                            "nullable": false,
+                            "description": "Defines if the shared link allows for the item to be edited.\n\nThis value can only be `true` if `can_download` is also `true` and if\nthe item has a type of `file`."
+                          }
+                        }
+                      },
+                      "download_count": {
+                        "type": "integer",
+                        "example": 3,
+                        "description": "The number of times this item has been downloaded.",
+                        "nullable": false
+                      },
+                      "preview_count": {
+                        "type": "integer",
+                        "example": 3,
+                        "description": "The number of times this item has been previewed.",
+                        "nullable": false
+                      }
+                    }
+                  },
+                  {
+                    "description": "The shared link for this file. This will be\n`null` if no shared link has been created for this\nfile."
+                  },
+                  {
+                    "nullable": true
+                  }
+                ]
+              },
+              "parent": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Folder--Mini"
+                  },
+                  {
+                    "description": "The folder that this file is located within."
+                  }
+                ],
+                "nullable": true
+              },
+              "item_status": {
+                "type": "string",
+                "description": "Defines if this item has been deleted or not.\n\n* `active` when the item has is not in the trash\n* `trashed` when the item has been moved to the trash but not deleted\n* `deleted` when the item has been permanently deleted.",
+                "enum": ["active", "trashed", "deleted"],
+                "nullable": false,
+                "example": "active"
+              }
+            }
+          }
+        ]
+      },
+      "File--Mini": {
+        "title": "File (Mini)",
+        "type": "object",
+        "x-box-resource-id": "file--mini",
+        "x-box-variant": "mini",
+        "description": "A mini representation of a file, used when\nnested under another resource.",
+        "required": ["sequence_id", "sha1"],
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/File--Base"
+          },
+          {
+            "properties": {
+              "sequence_id": {
+                "allOf": [
+                  {
+                    "type": "string",
+                    "example": "3",
+                    "nullable": false,
+                    "description": "A numeric identifier that represents the most recent user event\nthat has been applied to this item.\n\nThis can be used in combination with the `GET /events`-endpoint\nto filter out user events that would have occurred before this\nidentifier was read.\n\nAn example would be where a Box Drive-like application\nwould fetch an item via the API, and then listen to incoming\nuser events for changes to the item. The application would\nignore any user events where the `sequence_id` in the event\nis smaller than or equal to the `sequence_id` in the originally\nfetched resource."
+                  },
+                  {
+                    "nullable": false
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "description": "The name of the file",
+                "example": "Contract.pdf"
+              },
+              "sha1": {
+                "type": "string",
+                "format": "digest",
+                "nullable": false,
+                "example": "85136C79CBF9FE36BB9D05D0639C70C265C18D37",
+                "description": "The SHA1 hash of the file. This can be used to compare the contents\nof a file on Box with a local file."
+              },
+              "file_version": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FileVersion--Mini"
+                  },
+                  {
+                    "description": "The information about the current version of the file."
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "File--Base": {
+        "title": "File (Base)",
+        "type": "object",
+        "x-box-resource-id": "file--base",
+        "x-box-sanitized": true,
+        "x-box-tag": "files",
+        "x-box-variants": ["base", "mini", "standard", "full"],
+        "x-box-variant": "base",
+        "description": "The bare basic representation of a file, the minimal\namount of fields returned when using the `fields` query\nparameter.",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": false,
+            "description": "The unique identifier that represent a file.\n\nThe ID for any file can be determined\nby visiting a file in the web application\nand copying the ID from the URL. For example,\nfor the URL `https://*.app.box.com/files/123`\nthe `file_id` is `123`.",
+            "example": "12345"
+          },
+          "etag": {
+            "type": "string",
+            "example": "1",
+            "nullable": true,
+            "description": "The HTTP `etag` of this file. This can be used within some API\nendpoints in the `If-Match` and `If-None-Match` headers to only\nperform changes on the file if (no) changes have happened."
+          },
+          "type": {
+            "type": "string",
+            "description": "`file`",
+            "example": "file",
+            "enum": ["file"],
+            "nullable": false
+          }
+        }
+      },
+      "FileVersion--Mini": {
+        "title": "File version (Mini)",
+        "type": "object",
+        "x-box-resource-id": "file_version--mini",
+        "x-box-variant": "mini",
+        "description": "A mini representation of a file version, used when\nnested within another resource.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FileVersion--Base"
+          },
+          {
+            "properties": {
+              "sha1": {
+                "type": "string",
+                "description": "The SHA1 hash of this version of the file.",
+                "example": "134b65991ed521fcfe4724b7d814ab8ded5185dc"
+              }
+            }
+          }
+        ]
+      },
+      "FileVersion--Base": {
+        "title": "File version (Base)",
+        "type": "object",
+        "x-box-resource-id": "file_version--base",
+        "x-box-sanitized": true,
+        "x-box-variants": ["base", "mini", "standard", "full"],
+        "x-box-variant": "base",
+        "description": "The bare basic representation of a file version, the minimal\namount of fields returned when using the `fields` query\nparameter.",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": false,
+            "description": "The unique identifier that represent a file version.",
+            "example": "12345"
+          },
+          "type": {
+            "type": "string",
+            "description": "`file_version`",
+            "example": "file_version",
+            "enum": ["file_version"],
+            "nullable": false
+          }
+        }
+      },
+      "Folder--Mini": {
+        "title": "Folder (Mini)",
+        "type": "object",
+        "x-box-resource-id": "folder--mini",
+        "x-box-variant": "mini",
+        "description": "A mini representation of a file version, used when\nnested under another resource.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Folder--Base"
+          },
+          {
+            "properties": {
+              "sequence_id": {
+                "allOf": [
+                  {
+                    "type": "string",
+                    "example": "3",
+                    "nullable": false,
+                    "description": "A numeric identifier that represents the most recent user event\nthat has been applied to this item.\n\nThis can be used in combination with the `GET /events`-endpoint\nto filter out user events that would have occurred before this\nidentifier was read.\n\nAn example would be where a Box Drive-like application\nwould fetch an item via the API, and then listen to incoming\nuser events for changes to the item. The application would\nignore any user events where the `sequence_id` in the event\nis smaller than or equal to the `sequence_id` in the originally\nfetched resource."
+                  },
+                  {
+                    "nullable": false
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "description": "The name of the folder.",
+                "example": "Contracts",
+                "nullable": false
+              }
+            }
+          }
+        ]
+      },
+      "Folder--Base": {
+        "title": "Folder (Base)",
+        "type": "object",
+        "x-box-resource-id": "folder--base",
+        "x-box-sanitized": true,
+        "x-box-tag": "folders",
+        "x-box-variants": ["base", "mini", "standard", "full"],
+        "x-box-variant": "base",
+        "description": "The bare basic representation of a folder, the minimal\namount of fields returned when using the `fields` query\nparameter.",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "nullable": false,
+            "description": "The unique identifier that represent a folder.\n\nThe ID for any folder can be determined\nby visiting a folder in the web application\nand copying the ID from the URL. For example,\nfor the URL `https://*.app.box.com/folders/123`\nthe `folder_id` is `123`.",
+            "example": "12345"
+          },
+          "etag": {
+            "type": "string",
+            "nullable": true,
+            "example": "1",
+            "description": "The HTTP `etag` of this folder. This can be used within some API\nendpoints in the `If-Match` and `If-None-Match` headers to only\nperform changes on the folder if (no) changes have happened."
+          },
+          "type": {
+            "type": "string",
+            "description": "`folder`",
+            "example": "folder",
+            "enum": ["folder"],
+            "nullable": false
+          }
+        }
+      },
+      "User--Mini": {
+        "title": "User (Mini)",
+        "type": "object",
+        "x-box-resource-id": "user--mini",
+        "x-box-variant": "mini",
+        "description": "A mini representation of a user, as can be returned when nested within other\nresources.",
+        "required": ["name", "login"],
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/User--Base"
+          },
+          {
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The display name of this user",
+                "example": "Aaron Levie",
+                "maxLength": 50,
+                "nullable": false
+              },
+              "login": {
+                "type": "string",
+                "format": "email",
+                "description": "The primary email address of this user",
+                "example": "ceo@example.com",
+                "nullable": false
+              }
+            }
+          }
+        ]
+      },
+      "User--Base": {
+        "title": "User (Base)",
+        "type": "object",
+        "x-box-resource-id": "user--base",
+        "x-box-tag": "users",
+        "x-box-variants": ["base", "mini", "standard", "full"],
+        "x-box-variant": "base",
+        "description": "A mini representation of a user, used when\nnested within another resource.",
+        "required": ["type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The unique identifier for this user",
+            "example": "11446498"
+          },
+          "type": {
+            "type": "string",
+            "description": "`user`",
+            "example": "user",
+            "nullable": false,
+            "enum": ["user"]
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Files",
+      "x-box-tag": "files"
+    }
+  ]
+}
